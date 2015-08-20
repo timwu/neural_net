@@ -33,7 +33,7 @@ class HiddenLayer(object):
 
     @property
     def l2(self):
-        return (self.W ** 2).sum()
+        return T.mean(self.W ** 2)
 
 
 class LogisticLayer(object):
@@ -56,7 +56,7 @@ class LogisticLayer(object):
 
     @property
     def l2(self):
-        return (self.W ** 2).sum()
+        return T.mean(self.W ** 2)
 
 
 class MLP(object):
@@ -72,7 +72,7 @@ class MLP(object):
 
     @property
     def l2(self):
-        return self.in_layer.l2 + self.out_layer.l2
+        return (self.in_layer.l2 + self.out_layer.l2) / 2
 
 
 def main():
@@ -87,7 +87,6 @@ def main():
     mlp_predictions = T.argmax(mlp_output, axis=1)
 
     NLL = -T.mean(T.log(mlp_output)[T.arange(y.shape[0]), y % 10])
-    # TODO: add regularization somehow
     cost = NLL + 0.1 * mlp.l2
 
     alpha = 0.1
@@ -96,8 +95,14 @@ def main():
     train_mlp = theano.function(inputs=[x, y], outputs=cost, updates=updates)
     predict = theano.function(inputs=[x], outputs=mlp_predictions)
 
-    for i in range(50):
-        print(train_mlp(train_set[0], train_set[1].astype('int32')))
+    prev_cost = np.inf
+    for i in range(1000):
+        cur_cost = train_mlp(train_set[0], train_set[1].astype('int32'))
+        print cur_cost
+        if abs((cur_cost - prev_cost) / prev_cost) < 0.0001:
+            print "Gave up after %i iterations" % i
+            break
+        prev_cost = cur_cost
 
     predictions = predict(test_set[0])
 
