@@ -1,9 +1,10 @@
+import gzip
+import pickle
+
 import numpy as np
 import theano.tensor as T
 import theano
 import sklearn.metrics
-
-import gzip, pickle
 
 
 class HiddenLayer(object):
@@ -29,7 +30,7 @@ class HiddenLayer(object):
     def connect(self, next_layer):
         assert self.shape[1] == next_layer.shape[0]
 
-        return MLP(self, next_layer)
+        return MLP(self).connect(next_layer)
 
     @property
     def l2(self):
@@ -52,7 +53,7 @@ class LogisticLayer(object):
 
     def connect(self, next_layer):
         assert self.shape[1] == next_layer.shape[0]
-        return MLP(self, next_layer)
+        return MLP(self).connect(next_layer)
 
     @property
     def l2(self):
@@ -60,19 +61,43 @@ class LogisticLayer(object):
 
 
 class MLP(object):
-    def __init__(self, in_layer, out_layer):
-        self.shape = (in_layer.shape[0], out_layer.shape[1])
-        self.in_layer = in_layer
-        self.out_layer = out_layer
-
-        self.params = self.in_layer.params + self.out_layer.params
+    def __init__(self, in_layer):
+        self.layers = [in_layer]
 
     def output(self, input):
         return self.out_layer.output(self.in_layer.output(input))
 
     @property
+    def shape(self):
+        return self.in_layer.shape[0], self.out_layer.shape[1]
+
+    @property
+    def in_layer(self):
+        return self.layers[0]
+
+    @property
+    def out_layer(self):
+        return self.layers[-1]
+
+    @property
+    def params(self):
+        l = []
+        for layer in self.layers:
+            l += layer.params
+        return l
+
+    @property
     def l2(self):
-        return (self.in_layer.l2 + self.out_layer.l2) / 2
+        return (self.in_layer.l2 + self.out_layer.l2) / 2.0
+        # l2 = self.in_layer.l2
+        # for layer in self.layers[1:]:
+        #     l2 += layer.l2
+        # return l2
+
+    def connect(self, next_layer):
+        assert next_layer.shape[0] == self.out_layer.shape[1]
+        self.layers.append(next_layer)
+        return self
 
 
 def main():
@@ -82,7 +107,7 @@ def main():
     x = T.matrix('x')
     y = T.ivector('y')
 
-    mlp = HiddenLayer(784, 32).connect(LogisticLayer(32, 10))
+    mlp = HiddenLayer(784, 32).connect(HiddenLayer(32, 64)).connect(LogisticLayer(64, 10))
     mlp_output = mlp.output(x)
     mlp_predictions = T.argmax(mlp_output, axis=1)
 
@@ -99,7 +124,7 @@ def main():
     for i in range(1000):
         cur_cost = train_mlp(train_set[0], train_set[1].astype('int32'))
         print cur_cost
-        if abs((cur_cost - prev_cost) / prev_cost) < 0.0001:
+        if abs((cur_cost - prev_cost) / prev_cost) < 0.001:
             print "Gave up after %i iterations" % i
             break
         prev_cost = cur_cost
