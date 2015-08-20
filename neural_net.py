@@ -8,7 +8,7 @@ import gzip, pickle
 
 class HiddenLayer(object):
     def __init__(self, n_in, n_out):
-        rng = np.random.RandomState(123123)
+        rng = np.random.RandomState(123984)
 
         self.shape = (n_in, n_out)
 
@@ -31,6 +31,10 @@ class HiddenLayer(object):
 
         return MLP(self, next_layer)
 
+    @property
+    def l2(self):
+        return (self.W ** 2).sum()
+
 
 class LogisticLayer(object):
     def __init__(self, n_in, n_out):
@@ -50,9 +54,14 @@ class LogisticLayer(object):
         assert self.shape[1] == next_layer.shape[0]
         return MLP(self, next_layer)
 
+    @property
+    def l2(self):
+        return (self.W ** 2).sum()
+
 
 class MLP(object):
     def __init__(self, in_layer, out_layer):
+        self.shape = (in_layer.shape[0], out_layer.shape[1])
         self.in_layer = in_layer
         self.out_layer = out_layer
 
@@ -60,6 +69,10 @@ class MLP(object):
 
     def output(self, input):
         return self.out_layer.output(self.in_layer.output(input))
+
+    @property
+    def l2(self):
+        return self.in_layer.l2 + self.out_layer.l2
 
 
 def main():
@@ -69,16 +82,13 @@ def main():
     x = T.matrix('x')
     y = T.ivector('y')
 
-    l1 = HiddenLayer(784, 32)
-    l2 = LogisticLayer(32, 10)
-
-    mlp = l1.connect(l2)
+    mlp = HiddenLayer(784, 32).connect(LogisticLayer(32, 10))
     mlp_output = mlp.output(x)
     mlp_predictions = T.argmax(mlp_output, axis=1)
 
     NLL = -T.mean(T.log(mlp_output)[T.arange(y.shape[0]), y % 10])
     # TODO: add regularization somehow
-    cost = NLL
+    cost = NLL + 0.1 * mlp.l2
 
     alpha = 0.1
     updates = [(param, param - alpha * T.grad(cost, param)) for param in mlp.params]
@@ -86,12 +96,13 @@ def main():
     train_mlp = theano.function(inputs=[x, y], outputs=cost, updates=updates)
     predict = theano.function(inputs=[x], outputs=mlp_predictions)
 
-    for i in range(10):
+    for i in range(50):
         print(train_mlp(train_set[0], train_set[1].astype('int32')))
 
     predictions = predict(test_set[0])
 
-    print(sklearn.metrics.f1_score(test_set[1], predictions, average='weighted'))
+    print(sklearn.metrics.confusion_matrix(test_set[1], predictions))
+    print(sklearn.metrics.classification_report(test_set[1], predictions))
 
 if __name__ == "__main__":
     main()
