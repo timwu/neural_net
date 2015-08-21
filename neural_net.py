@@ -1,5 +1,6 @@
 import gzip
 import pickle
+import sys
 
 import numpy as np
 import theano.tensor as T
@@ -9,6 +10,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 plt.ioff()
+
 
 class HiddenLayer(object):
     def __init__(self, n_in, n_out):
@@ -95,7 +97,10 @@ class MLP(object):
 
     @property
     def l2(self):
-        return reduce(lambda x, y: x + y, [layer.l2 for layer in self.layers]) / len(self.layers)
+        l2 = 0
+        for layer in self.layers:
+            l2 += layer.l2
+        return l2
 
     def connect(self, next_layer):
         assert next_layer.shape[0] == self.out_layer.shape[1]
@@ -104,36 +109,36 @@ class MLP(object):
 
 
 def main():
-    with gzip.open("data/mnist.pkl.gz") as f:
-        train_set, valid_set, test_set = pickle.load(f)
+    train_set, valid_set, test_set = load_data()
+
+    shared_inputs, shared_labels = share_dataset(*train_set)
 
     x = T.matrix('x')
-    y = T.ivector('y')
 
     mlp = HiddenLayer(784, 64).connect(HiddenLayer(64, 64)).connect(HiddenLayer(64, 32)).connect(LogisticLayer(32, 10))
-    mlp_output = mlp.output(x)
-    mlp_predictions = T.argmax(mlp_output, axis=1)
+    mlp_output = mlp.output(shared_inputs)
 
-    NLL = -T.mean(T.log(mlp_output)[T.arange(y.shape[0]), y])
+    NLL = -T.mean(T.log(mlp_output)[T.arange(shared_labels.shape[0]), shared_labels])
     cost = NLL + 0.01 * mlp.l2
 
     alpha = 0.1
     updates = [(param, param - alpha * T.grad(cost, param)) for param in mlp.params]
 
-    train_mlp = theano.function(inputs=[x, y], outputs=cost, updates=updates)
-    predict = theano.function(inputs=[x], outputs=mlp_predictions)
+    train_mlp = theano.function(inputs=[], outputs=cost, updates=updates)
 
     prev_cost = np.inf
     costs = []
-    for i in range(300):
-        cur_cost = train_mlp(train_set[0], train_set[1].astype('int32'))
-        print cur_cost
+    for i in range(5000):
+        cur_cost = train_mlp()
+        print(cur_cost)
         # if i > 50 and abs((cur_cost - prev_cost) / prev_cost) < 0.00001:
         #     print "Gave up after %i iterations" % i
         #     break
         prev_cost = cur_cost
         costs.append(cur_cost)
 
+    mlp_predictions = T.argmax(mlp.output(x), axis=1)
+    predict = theano.function(inputs=[x], outputs=mlp_predictions)
     predictions = predict(test_set[0])
 
     print(sklearn.metrics.confusion_matrix(test_set[1], predictions))
@@ -141,6 +146,24 @@ def main():
 
     sns.tsplot(costs)
     plt.show()
+
+
+def load_data():
+    with gzip.open("data/mnist.pkl.gz") as f:
+        if sys.version_info.major == 3:
+            train_set, valid_set, test_set = pickle.load(f, encoding='latin1')
+        else:
+            train_set, valid_set, test_set = pickle.load(f)
+
+    return train_set, valid_set, test_set
+
+
+def share_dataset(inputs, labels):
+    shared_input = theano.shared(inputs.astype(theano.config.floatX))
+    shared_labels = theano.shared(labels.astype('int32'))
+
+    return shared_input, shared_labels
+
 
 if __name__ == "__main__":
     main()
