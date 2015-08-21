@@ -2,3 +2,4 @@ numpy
 theano
 sklearn
 matplotlib
+seaborn
