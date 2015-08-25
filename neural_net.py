@@ -40,7 +40,11 @@ class HiddenLayer(object):
 
     @property
     def l2(self):
-        return T.mean(T.power(self.W, 2))
+        return T.sum(T.power(self.W, 2))
+
+    @property
+    def l1(self):
+        return T.sum(abs(self.W))
 
 
 class LogisticLayer(object):
@@ -63,7 +67,11 @@ class LogisticLayer(object):
 
     @property
     def l2(self):
-        return T.mean(T.power(self.W, 2))
+        return T.sum(T.power(self.W, 2))
+
+    @property
+    def l1(self):
+        return T.sum(abs(self.W))
 
 
 class MLP(object):
@@ -102,6 +110,13 @@ class MLP(object):
             l2 += layer.l2
         return l2
 
+    @property
+    def l1(self):
+        l1 = 0
+        for layer in self.layers:
+            l1 += layer.l1
+        return l1
+
     def connect(self, next_layer):
         assert next_layer.shape[0] == self.out_layer.shape[1]
         self.layers.append(next_layer)
@@ -118,8 +133,11 @@ def main():
     mlp = HiddenLayer(784, 64).connect(HiddenLayer(64, 64)).connect(HiddenLayer(64, 32)).connect(LogisticLayer(32, 10))
     mlp_output = mlp.output(shared_inputs)
 
+    lambda_1 = 0
+    lambda_2 = 0.001
+
     NLL = -T.mean(T.log(mlp_output)[T.arange(shared_labels.shape[0]), shared_labels])
-    cost = NLL + 0.01 * mlp.l2
+    cost = NLL + lambda_1 * mlp.l1 + lambda_2 * mlp.l2
 
     alpha = 0.1
     updates = [(param, param - alpha * T.grad(cost, param)) for param in mlp.params]
@@ -144,8 +162,8 @@ def main():
     print(sklearn.metrics.confusion_matrix(test_set[1], predictions))
     print(sklearn.metrics.classification_report(test_set[1], predictions))
 
-    sns.tsplot(costs)
-    plt.show()
+    # sns.tsplot(costs, value="cost")
+    # plt.show()
 
 
 def load_data():
