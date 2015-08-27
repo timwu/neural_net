@@ -130,7 +130,7 @@ def main():
 
     x = T.matrix('x')
 
-    mlp = HiddenLayer(784, 64).connect(HiddenLayer(64, 64)).connect(HiddenLayer(64, 32)).connect(LogisticLayer(32, 10))
+    mlp = HiddenLayer(784, 128).connect(HiddenLayer(128, 64)).connect(HiddenLayer(64, 32)).connect(LogisticLayer(32, 10))
     mlp_output = mlp.output(shared_inputs)
 
     lambda_1 = 0
